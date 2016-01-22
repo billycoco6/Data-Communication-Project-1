@@ -12,8 +12,11 @@ def check_url(url):
 def mkDownloadRequest(serv, objName):
     return ("GET {o} HTTP/1.1\r\n" + "Host: {s}\r\n\r\n").format(o=objName, s=serv)
 
+def HeadRequest(serv, objName):
+    return ("HEAD {o} HTTP/1.1\r\n" + "Host: {s}\r\n\r\n").format(o=objName, s=serv)
+
 def resumableRequest(serv, objName, start, stop):
-    return ("GET {o} HTTP/1.1\r\n" + "Host: {s}\r\n\r\n" + "Range: byte={a}-{z}" + "\r\n\r\n").format(o=objName, s=serv, a=start, z=stop)
+    return ("GET {o} HTTP/1.1\r\n" + "Host: {s}\r\n" + "Range: bytes={a}-{z}" + "\r\n\r\n").format(o=objName, s=serv, a=start, z=stop)
 
 def getHeaderSize(header):
 
@@ -42,45 +45,115 @@ def getHeaderSize(header):
         
     return content_length, header_length, has_content_length, error
     
-def getDownloadInformation(servName, objName):
+
+def getContentLength(servName, objName):
 
     sock = sk.socket(sk.AF_INET, sk.SOCK_STREAM)
 
     sock.connect((servName, port))
-
-    request = mkDownloadRequest(servName, objName)
+    
+    request = HeadRequest(servName, objName)
 
     sock.send(request)
-    check = False
-    head_content = ""
-    file_content = ""
-    head_file = file
-    download_file = file
+
+    header = ""
 
     while True:
 
         data = sock.recv(1024)
 
-        if "\r\n\r\n" in data and check != True:
-            header = data[:data.find("\r\n\r\n")]
-            content_length, header_length, has_content_length, http_error = getHeaderSize(header)[0], getHeaderSize(header)[1], getHeaderSize(header)[2], getHeaderSize(header)[3]
-            if http_error:
-                return "Error, could not download page."
-                 
-            print "=====================", content_length, header_length
-            total_loaded_content = 0 - header_length - len("\r\n\r\n")
-            check = True
+        header = data[:data.find("\r\n\r\n")]
+
+        sock.close
+
+        break
+
+    return getHeaderSize(header)
+
+
+
+
+
+
+
+def getDownloadInformation(servName, objName):
+
+    file_exist = False
+    check = False
+    head_content = ""
+    file_content = ""
+    head_file = file
+    download_file = file
+    filename = "lionnoi.jpg"
+
+    sock = sk.socket(sk.AF_INET, sk.SOCK_STREAM)
+
+    sock.connect((servName, port))
+
+    content_length = getContentLength(servName, objName)[0]
+    header_length = getContentLength(servName, objName)[1]
+    has_content_length = getContentLength(servName, objName)[2]
+    error = getContentLength(servName, objName)[3]
+
+    total_loaded_content = 0 - header_length - len("\r\n\r\n")
+
+    if error:
+        return "Error, unable to download the file."
+
+    if os.path.exists(filename):
+
+        print "file exist na"
+
+        file_exist = True
+
+        file_size = os.stat(filename).st_size
+
+        # print "file_size", file_size
+
+        if file_size == content_length:
+            return "File already downloaded."
+
+        request = resumableRequest(servName, objName, file_size, content_length)
+
+        mode = "resume mode"
+
+
+        print content_length, file_size, content_length - file_size - header_length
+
+
+    else:
+
+        request = mkDownloadRequest(servName, objName)
+
+        mode = "download mode"
+
+    sock.send(request)
+
+    while True:
+
+        data = sock.recv(1024)
 
         for i in data:
+            print total_loaded_content
             total_loaded_content += 1
-            if total_loaded_content > 0:
+            if "\r\n\r\n" in head_content:
                 file_content += i
             else:
                 head_content += i
 
-        if content_length != 0 and total_loaded_content >= content_length and has_content_length:
-            print "total load content =", total_loaded_content
-            print "content length =", content_length
+
+        if mode == "download mode":
+            open_file = open(filename, "wb")
+            open_file.write(file_content)
+            print file_content
+
+        elif mode == "resume mode":
+            open_file = open(filename, "a+")
+            open_file.write(file_content)
+            # print file_content
+
+        if content_length != 0 and total_loaded_content == content_length and has_content_length:
+            print "total load content =", total_loaded_content, "& content length =", content_length
             sock.close()
             break
 
@@ -88,40 +161,29 @@ def getDownloadInformation(servName, objName):
             sock.close()
             break
 
-    filename = raw_input("Enter the file name: ")
-
     if os.path.exists(filename):
 
-        overwrite = raw_input("File exists, do you want to replace? y/n: ")
-        if overwrite == "y":
-            open_file = open(filename, "wb")
-            open_file.write(file_content)
-            open_file.close
-            head_file = open("HEADFILE:" + filename, "wb")
-            head_file.write(head_content)
-            head_file.close
+        open_file.close
+            # head_file = open("HEADFILE:" + filename, "wb")
+            # head_file.write(head_content)
+            # head_file.close
     else:
         open_file = open(filename, "wb")
         open_file.write(file_content)
         open_file.close
-        head_file = open("HEADFILE:" + filename, "wb")
-        head_file.write(head_content)
-        head_file.close
+        # head_file = open("HEADFILE:" + filename, "wb")
+        # head_file.write(head_content)
+        # head_file.close
 
-def resume(filename):
-    if os.path.exists(filename):
 
-        Resumesock = sk.socket(sk.AF_INET, sk.SOCK_STREAM)
-        Resumesock.connect((servName, port))
-        request = mkDownloadRequest(servName, objName)
-        Resumesock.send(request)
 
-def main():
-    url = raw_input("Enter the url: ")
+
+
+def main(url):
     parse = urlparse(url)
     servName = parse.netloc
     path = parse.path
-    
+    # print getContentLength(servName, path)
     print getDownloadInformation(servName, path)
 
-print main()
+print main("http://images.clipartpanda.com/lion-clipart-4Tb5XEETg.png")
