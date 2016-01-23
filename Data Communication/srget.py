@@ -16,7 +16,7 @@ def HeadRequest(serv, objName):
     return ("HEAD {o} HTTP/1.1\r\n" + "Host: {s}\r\n\r\n").format(o=objName, s=serv)
 
 def resumableRequest(serv, objName, start, stop):
-    return ("GET {o} HTTP/1.1\r\n" + "Host: {s}\r\n" + "Range: bytes={a}-{z}" + "\r\n\r\n").format(o=objName, s=serv, a=start, z=stop)
+    return ("GET {o} HTTP/1.1\r\n" + "Host: {s}\r\n" + "Range: bytes={h}-{z}" + "\r\n\r\n").format(o=objName, s=serv, h=start, z=stop)
 
 def getHeaderSize(header):
 
@@ -84,7 +84,7 @@ def getDownloadInformation(servName, objName):
     file_content = ""
     head_file = file
     download_file = file
-    filename = "lionnoi.jpg"
+    filename = "lionnoiresume.jpg"
 
     sock = sk.socket(sk.AF_INET, sk.SOCK_STREAM)
 
@@ -108,8 +108,6 @@ def getDownloadInformation(servName, objName):
 
         file_size = os.stat(filename).st_size
 
-        # print "file_size", file_size
-
         if file_size == content_length:
             return "File already downloaded."
 
@@ -117,8 +115,10 @@ def getDownloadInformation(servName, objName):
 
         mode = "resume mode"
 
+        total_loaded_content = file_size - header_length - len("\r\n\r\n")
 
-        print content_length, file_size, content_length - file_size - header_length
+
+        print content_length, file_size, content_length - file_size
 
 
     else:
@@ -134,7 +134,7 @@ def getDownloadInformation(servName, objName):
         data = sock.recv(1024)
 
         for i in data:
-            print total_loaded_content
+            print total_loaded_content, content_length, header_length
             total_loaded_content += 1
             if "\r\n\r\n" in head_content:
                 file_content += i
@@ -145,14 +145,14 @@ def getDownloadInformation(servName, objName):
         if mode == "download mode":
             open_file = open(filename, "wb")
             open_file.write(file_content)
-            print file_content
+            # print file_content
 
         elif mode == "resume mode":
             open_file = open(filename, "a+")
             open_file.write(file_content)
-            # print file_content
+            print file_content
 
-        if content_length != 0 and total_loaded_content == content_length and has_content_length:
+        if content_length != 0 and total_loaded_content >= content_length and has_content_length:
             print "total load content =", total_loaded_content, "& content length =", content_length
             sock.close()
             break
@@ -161,6 +161,7 @@ def getDownloadInformation(servName, objName):
             sock.close()
             break
 
+    # print content_length - file_size - total_loaded_content
     if os.path.exists(filename):
 
         open_file.close
