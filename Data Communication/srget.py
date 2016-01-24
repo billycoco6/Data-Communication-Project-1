@@ -88,17 +88,17 @@ def check_version(headfile, new_header):
             old_etag += i
             if i == "\r":
                 break
-        # print old_etag
+        if old_etag in new_header:
+            same_version = True
 
     elif "Last-Modified: " in header:
         for i in header[header.find("Last-Modified: ") + 15:]:
             old_datemodified += i
             if i == "\r":
                 break
-        # print old_datemodified
+        if old_datemodified in new_header:
+            same_version = True
 
-    if old_etag in new_header or old_datemodified in new_header:
-        same_version = True
     return same_version
 
 
@@ -106,10 +106,6 @@ def check_version(headfile, new_header):
 
 
 def download_and_resume(servName, objName):
-
-    head_content = ""
-    head_file = file
-    download_file = file
 
     sock = sk.socket(sk.AF_INET, sk.SOCK_STREAM)
 
@@ -127,25 +123,47 @@ def download_and_resume(servName, objName):
         file_size = os.stat(filename).st_size
         total_loaded_content = file_size
 
+
+
         # RESUME & DOWNLOAD separate by request!
 
         if os.path.exists("HEADFILE" + filename):
 
+            print "1"
+
             same_version = check_version("HEADFILE" + filename, header)
 
-            if same_version == True:
+            print header
 
-                if file_size == content_length:
+            if same_version == True and file_size != content_length:
 
-                    return "File has been successfully downloaded."
-                else:
-
-                    request = resumableRequest(servName, objName, file_size, content_length)
+                request = resumableRequest(servName, objName, file_size, content_length)
 
             else:
 
+                print "2"
+
+                os.remove(filename)
+
+                os.remove("HEADFILE" + filename)
+
                 request = mkDownloadRequest(servName, objName)
 
+                total_loaded_content = 0
+
+        else: # different file
+
+            if file_size == content_length:
+
+                return "File has been successfully downloaded."
+
+            print "show"
+
+            os.remove(filename)
+
+            request = mkDownloadRequest(servName, objName)
+
+            total_loaded_content = 0
 
         # if version same, but not finish:
             # resume
@@ -159,10 +177,16 @@ def download_and_resume(servName, objName):
         # else: <--- cannot find version
             # redownload
 
-
     else:
+
         request = mkDownloadRequest(servName, objName)
         total_loaded_content = 0
+
+    print "4"
+
+    head_content = ""
+    head_file = file
+    download_file = file
 
     sock.send(request)
 
@@ -198,7 +222,7 @@ def download_and_resume(servName, objName):
 
         sock.close
 
-        # delete head file if downloading done.
+        os.remove("HEADFILE" + filename)
 
     else:
 
@@ -220,7 +244,8 @@ def main(url):
     print download_and_resume(servName, path)
 
 filename = "lionnoi.jpg"
-url = "http://classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg"
+url = "http://images.clipartpanda.com/lion-clipart-4Tb5XEETg.png"
+# url = "http://classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg"
 
 print main(url)
 
