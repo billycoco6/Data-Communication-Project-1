@@ -1,6 +1,7 @@
+#!/usr/bin/env python
 import socket as sk
-import os, getopt, sys
-
+import os, getopt, sys, asyncore, logging
+from cStringIO import StringIO
 from urlparse import urlparse
 
 port = 80
@@ -49,6 +50,28 @@ def get_header_information(header):
         
     return content_length, header_length, has_content_length, error
 
+
+def check_redirect(header):
+
+    new_url = ""
+
+    need_redirect = False
+
+    if "HTTP/1.1 301" in header or "HTTP/1.1 302" in header:
+
+        need_redirect = True
+
+        for i in header[header.find("location: ") + 10 :]:
+
+            if i == "\r":
+
+                break
+
+            else:
+
+                new_url += i
+
+    return need_redirect, new_url
 
     
 
@@ -103,15 +126,25 @@ def check_version(headfile, new_header):
 
 
 
+def download_and_resume(servName, objName, filename):
 
+    header = getHeader(servName, objName)
 
-def download_and_resume(servName, objName):
+    # redirect check
+
+    redirect_or_not = check_redirect(header)
+
+    print "redirect_or_not =", redirect_or_not
+
+    if redirect_or_not[0] == True:
+
+        print "================",servName+"/"+redirect_or_not[1]
+
+        return main(servName + "/" + redirect_or_not[1]) # call main with new url
 
     sock = sk.socket(sk.AF_INET, sk.SOCK_STREAM)
 
     sock.connect((servName, port))
-
-    header = getHeader(servName, objName)
 
     content_length, header_length, has_content_length, error = get_header_information(header)
 
@@ -151,7 +184,7 @@ def download_and_resume(servName, objName):
 
                 total_loaded_content = 0
 
-        else: # different file
+        else:
 
             if file_size == content_length:
 
@@ -164,18 +197,6 @@ def download_and_resume(servName, objName):
             request = mkDownloadRequest(servName, objName)
 
             total_loaded_content = 0
-
-        # if version same, but not finish:
-            # resume
-
-        # elif file_size == content_length: # version the same
-        #     return "File has been successfully downloaded."
-
-        # elif version not the same:
-            # redownload
-
-        # else: <--- cannot find version
-            # redownload
 
     else:
 
@@ -200,6 +221,8 @@ def download_and_resume(servName, objName):
 
         open_head.write(head_content)
 
+
+
     if has_content_length == True:
 
         while total_loaded_content < content_length:
@@ -218,7 +241,10 @@ def download_and_resume(servName, objName):
         
             open_file.write(file_content)
 
-            # close file?
+
+        open_file.close()
+
+        open_head.close()
 
         sock.close
 
@@ -238,25 +264,38 @@ def download_and_resume(servName, objName):
 
 
 def main(url):
-    parse = urlparse(url)
+    url_with_http = check_url(url)
+    parse = urlparse(url_with_http)
     servName = parse.netloc
     path = parse.path
-    print download_and_resume(servName, path)
+    print download_and_resume(servName, path, filename)
 
 filename = "lionnoi.jpg"
-url = "http://images.clipartpanda.com/lion-clipart-4Tb5XEETg.png"
-# url = "http://classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg"
+# url = "images.clipartpanda.com/lion-clipart-4Tb5XEETg.png"
+url = "classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg"
+# url = "http://www.muic.info/"
 
 print main(url)
 
 # def main(argv):
-#     outputfile = ""
+#     filename = ""
 #     try:
-#         opts, args = getopt.getopt(sys.argv[1:], "oc", ["output", "connection"])
+#         opts, args = getopt.getopt(sys.argv[1:], "o:c:", ["output=","cname="])
 #     except getopt.GetoptError as err:
 #         print str(err)
 #         usage()
 #         sys.exit()
+#     url = argv[-1]
+#     for opt,arg in opts:
+#         if opt == "-o":
+#             filename=arg
+#     url_with_http = check_url(url)
+#     parse = urlparse(url_with_http)
+#     servName = parse.netloc
+#     path = parse.path
+#     print download_and_resume(servName, path, filename)
+
+
 
 # if __name__ == "__main__":
-#     main()
+#     main(sys.argv[1:])
