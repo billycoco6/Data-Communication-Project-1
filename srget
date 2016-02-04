@@ -17,51 +17,42 @@ class download_or_resume(object):
     def __init__(self, serv, obj, filename, number_of_connection):
  
         self.port = 80
-        self.n_connection = number_of_connection
+        self.n_connection = int(number_of_connection)
  
         self.filename = filename
 
         self.servName = serv
         self.objName = obj
- 
-        print "cp 1"
 
         self.head_content = ""
         self.getHeader(self.servName, self.objName)
 
-        print "cp 2"
-
         self.new_url = ""
         self.need_redirect = False
         self.check_redirect()
-
-        print "cp 3"
 
         self.header_length = None
         self.has_content_length = False
         self.content_length = 0
         self.error = True
 
-        print "cp 4"
-
         self.same_version = False
         self.total_loaded_content = 0
-        self.check_download_type()
-        self.download_and_resume()
-
-        print "cp 5"
-
-        # self.parse_content()
-
-        self.length = [0]
-        self.download_chunk = 0
-        self.bytes_size_number = [0]
-        self.bytes_range = []
-        self.parse_content()
-        for i in range(len(self.length) - 1):
-            self.make_gap()
-        # self.make_multiple_request()
         
+        if self.n_connection == 1:
+            print "here start"
+            self.check_download_type()
+            self.download_and_resume()
+
+        else:
+            self.length = [0]
+            self.download_chunk = 0
+            self.bytes_size_number = [0]
+            self.parse_content()
+            for i in range(len(self.length) - 1):
+                self.make_gap()
+                self.async_download(self.bytes_size_number[i*self.n_connection:(i*self.n_connection)+self.n_connection+1], i)
+            
         # print "bytes_size_number =",self.bytes_size_number
         print "=========="
 
@@ -285,25 +276,23 @@ class download_or_resume(object):
         self.bytes_size_number[-1] = self.bytes_size_number[-1] + (self.length[self.download_chunk + 1] - self.bytes_size_number[-1])
         self.download_chunk += 1
 
-        print "use this", self.bytes_size_number
+    def async_download(self, start_stop, time):
 
-    # def make_multiple_request(self):
-    #     for i in range(len(self.bytes_size_number) - 1):
-    #         start, stop = self.bytes_size_number[i], self.bytes_size_number[i + 1]
-    #         self.bytes_range.append(("bytes={h}-{z}").format(h = start, z = stop))
-    #         print "===== multiple start, stop =====", i
-    #         print start, stop
+        clients = []
 
-    def async_download(self):
+        # print "length", start_stop
 
-        for i in range(len(self.bytes_size_number) - 1):
-            HTTPClient(self.servName, self.objName, self.port, self.bytes_size_number[i], self.bytes_size_number[i + 1], self.filename)
+        for i in range(self.n_connection):
+            print "bytes={h}-{z}".format(h=start_stop[i], z=start_stop[i+1])
+            # clients.append(HTTPClient(self.servName, self.objName, self.port, start_stop[i], start_stop[i+1], self.filename+str(time)+str(i)))
 
-        logging.basicConfig(level=logging.DEBUG,
-        format="%(asctime)-15s %(name)s: %(message)s"
+        print clients
 
-        )
-        asyncore.loop()
+        # logging.basicConfig(level=logging.DEBUG,
+        # format="%(asctime)-15s %(name)s: %(message)s"
+
+        # )
+        # asyncore.loop()
 
     # def multi_downloading(self, start, stop, servName, objName):
     #     print "in"
@@ -322,17 +311,6 @@ class download_or_resume(object):
 
     #     print "out"
     #     print "====================================="
-
-
-
-# clients = [
-#     HTTPClient("classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg", "lionnoi.jpg"),
-#     HTTPClient("classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg", "lionnoi.jpg"),
-#     HTTPClient("classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg", "lionnoi.jpg"),
-# ]
-
-
-
 
 class HTTPClient(asyncore.dispatcher):
     def __init__(self, servName, path, port, start, stop, filename):
@@ -363,7 +341,6 @@ class HTTPClient(asyncore.dispatcher):
         self.logger.debug("connection established")
 
     def writefile(self, content):
-        print "... writing ..."
         self.open_file = open(self.filename, "a+")
         self.open_file.write(content)
 
@@ -434,6 +411,8 @@ class HTTPClient(asyncore.dispatcher):
     # download_or_resume("www.muic.info/", "test.php", 3),
     # download_or_resume("images.clipartpanda.com/lion-clipart-4Tb5XEETg.png", "test.jpg", 4)
 
+
+
 def check_url(url):
     if url[:7] != "http://":
         url = "http://" + url
@@ -452,9 +431,9 @@ def main(argv):
         if opt == "-o":
             filename=arg
         elif opt == "-c":
-            print "do sth"
+            conn=sys.argv[4]
     servName, path = check_url(url)
-    download_or_resume(servName, path, filename, 3)
+    download_or_resume(servName, path, filename, conn)
 
 if __name__ == "__main__":
     main(sys.argv[1:])
