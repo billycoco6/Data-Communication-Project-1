@@ -3,6 +3,15 @@ import socket as sk
 import os, asyncore, logging, sys, getopt
 from cStringIO import StringIO
 from urlparse import urlparse
+
+def makerequest(condition, objname, serv, start, stop):
+    if condition == "head":
+        return ("HEAD {o} HTTP/1.1\r\n"+"Host: {s}\r\n"+"\r\n\r\n").format(o = objname,s = serv)
+    elif stop != None:
+        return ("GET {o} HTTP/1.1\r\n"+"Host: {s}\r\n"+"Range: bytes={h}-{z}\r\n\r\n").format(o = objname,s = serv,h = start,z = stop)            
+    else:
+        return ("GET {o} HTTP/1.1\r\n"+"Host: {s}\r\n"+"Range: bytes={h}-\r\n"+"Connection: close\r\n\r\n").format(o = objname,s = serv,h = start)
+
  
 class download_or_resume(object):
     def __init__(self, serv, obj, filename, number_of_connection):
@@ -51,12 +60,14 @@ class download_or_resume(object):
         self.parse_content()
         for i in range(len(self.length) - 1):
             self.make_gap()
-        self.make_multiple_request()
+        # self.make_multiple_request()
         
         # print "bytes_size_number =",self.bytes_size_number
         print "=========="
 
-        print "cp 6"
+        print "cp 6: multiple clients"
+
+        # self.async_download()
 
         print "end"
 
@@ -67,21 +78,11 @@ class download_or_resume(object):
             self.head_content += data
         self.closesocket()
 
-    def makerequest(self, condition, objname, serv, start, stop):
-        if condition == "head":
-            return ("HEAD {o} HTTP/1.1\r\n"+"Host: {s}\r\n"+"\r\n\r\n").format(o = objname,s = serv)
-        elif stop != None:
-            print "here 1"
-            return ("GET {o} HTTP/1.1\r\n"+"Host: {s}\r\n"+"Range: bytes={h}-{z}\r\n\r\n").format(o = objname,s = serv,h = start,z = stop)            
-        else:
-            print "here 2"
-            return ("GET {o} HTTP/1.1\r\n"+"Host: {s}\r\n"+"Range: bytes={h}-\r\n"+"Connection: close\r\n\r\n").format(o = objname,s = serv,h = start)
-    
     def makesocket(self, start, stop, condition):
         self.sock = sk.socket(sk.AF_INET, sk.SOCK_STREAM)
         try:
             self.sock.connect((self.servName, self.port))
-            request = self.makerequest(condition, self.objName, self.servName, start, stop)
+            request = makerequest(condition, self.objName, self.servName, start, stop)
             self.sock.send(request)
         except:
             print "make socket error"
@@ -284,14 +285,25 @@ class download_or_resume(object):
         self.bytes_size_number[-1] = self.bytes_size_number[-1] + (self.length[self.download_chunk + 1] - self.bytes_size_number[-1])
         self.download_chunk += 1
 
-    def make_multiple_request(self):
-        for i in range(len(self.bytes_size_number) - 1):
-            start, stop = self.bytes_size_number[i], self.bytes_size_number[i + 1]
-            self.bytes_range.append(("bytes={h}-{z}").format(h = start, z = stop))
-            print "===== multiple start, stop =====", i
-            print start, stop
+        print "use this", self.bytes_size_number
 
-        print self.bytes_range
+    # def make_multiple_request(self):
+    #     for i in range(len(self.bytes_size_number) - 1):
+    #         start, stop = self.bytes_size_number[i], self.bytes_size_number[i + 1]
+    #         self.bytes_range.append(("bytes={h}-{z}").format(h = start, z = stop))
+    #         print "===== multiple start, stop =====", i
+    #         print start, stop
+
+    def async_download(self):
+
+        for i in range(len(self.bytes_size_number) - 1):
+            HTTPClient(self.servName, self.objName, self.port, self.bytes_size_number[i], self.bytes_size_number[i + 1], self.filename)
+
+        logging.basicConfig(level=logging.DEBUG,
+        format="%(asctime)-15s %(name)s: %(message)s"
+
+        )
+        asyncore.loop()
 
     # def multi_downloading(self, start, stop, servName, objName):
     #     print "in"
@@ -310,26 +322,123 @@ class download_or_resume(object):
 
     #     print "out"
     #     print "====================================="
+
+
+
+# clients = [
+#     HTTPClient("classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg", "lionnoi.jpg"),
+#     HTTPClient("classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg", "lionnoi.jpg"),
+#     HTTPClient("classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg", "lionnoi.jpg"),
+# ]
+
+
+
+
+class HTTPClient(asyncore.dispatcher):
+    def __init__(self, servName, path, port, start, stop, filename):
+        asyncore.dispatcher.__init__(self) 
+        self.port = 80
+        self.recvbuf = StringIO()
+        self.sendbuf = ""
+        self.logger = logging.getLogger(self.servName+self.objName)
+        self.create_socket(sk.AF_INET, sk.SOCK_STREAM)
+        self.connect((self.servName, self.port))
+
+        self.filename = filename
+        self.url = url
+        self.servName = servName
+        self.objName = path
+        self.start = start
+        self.stop = stop
+        self.total_loaded_content = 0
+
+        self.request = makerequest(None, self.objName, self.servName, self.start, self.stop, self.filename)
+        print "request = ",self.request
+        self.write(self.request)
+
+    def write(self,msg):
+        self.sendbuf += msg
+
+    def handle_connect(self):
+        self.logger.debug("connection established")
+
+    def writefile(self, content):
+        print "... writing ..."
+        self.open_file = open(self.filename, "a+")
+        self.open_file.write(content)
+
+        # with open(self.savefileName, "a+") as f:
+        #         f.write(content)
+        #         f.flush()
+
+    def handle_close(self):
+        self.logger.debug("got disconnected")
+        self.close()
+
+    def handle_read(self): ## when recv = there is something for you to read --> do what
+
+        if "\r\n\r\n" not in self.recvbuf.getvalue():
+            buf = self.recv(1) ## 2K - 10K -- recommend 8K
+            self.recvbuf.write(buf)
+            loaded_head_content += buf
+
+        else:
+            buf = self.recv(8192)
+            self.recvbuf.write(buf)
+            self.total_loaded_content += len(buf)
+            self.writefile(buf)
+                
+
+    def writeable(self): # if there is anything to send??
+        return len(self.sendbuf) > 0 ## you have sth to send
+
+
+    def handle_write(self):
+        bytes_send = self.send(self.sendbuf)
+        self.sendbuf = self.sendbuf[bytes_send:] ## the remainder
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
  
-clients = [
     # download_or_resume("classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg", "test.jpg", 5),
     # download_or_resume("www.muic.info/", "test.php", 3),
-#     HTTPClient("classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg", "lionnoi.jpg"),
     # download_or_resume("images.clipartpanda.com/lion-clipart-4Tb5XEETg.png", "test.jpg", 4)
-    # http://cs.muic.mahidol.ac.th/~ktangwon/hugefile.qqq
-]
- 
-logging.basicConfig(level=logging.DEBUG,
-    format="%(asctime)-15s %(name)s: %(message)s"
-    )
- 
-# asyncore.loop()
 
 def check_url(url):
     if url[:7] != "http://":
         url = "http://" + url
     parse = urlparse(url)
-    return parse.netloc, parse.path
+    return parse.hostname, parse.path
 
 def main(argv):
     try:
