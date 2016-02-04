@@ -1,0 +1,351 @@
+#!/usr/bin/env python
+import socket as sk
+import os, asyncore, logging, sys, getopt
+from cStringIO import StringIO
+from urlparse import urlparse
+ 
+class download_or_resume(object):
+    def __init__(self, serv, obj, filename, number_of_connection):
+ 
+        self.port = 80
+        self.n_connection = number_of_connection
+ 
+        self.filename = filename
+
+        self.servName = serv
+        self.objName = obj
+ 
+        print "cp 1"
+
+        self.head_content = ""
+        self.getHeader(self.servName, self.objName)
+
+        print "cp 2"
+
+        self.new_url = ""
+        self.need_redirect = False
+        self.check_redirect()
+
+        print "cp 3"
+
+        self.header_length = None
+        self.has_content_length = False
+        self.content_length = 0
+        self.error = True
+
+        print "cp 4"
+
+        self.same_version = False
+        self.total_loaded_content = 0
+        self.check_download_type()
+        self.download_and_resume()
+
+        print "cp 5"
+
+        # self.parse_content()
+
+        self.length = [0]
+        self.download_chunk = 0
+        self.bytes_size_number = [0]
+        self.bytes_range = []
+        self.parse_content()
+        for i in range(len(self.length) - 1):
+            self.make_gap()
+        self.make_multiple_request()
+        
+        # print "bytes_size_number =",self.bytes_size_number
+        print "=========="
+
+        print "cp 6"
+
+        print "end"
+
+    def getHeader(self, servName, objName):
+        self.makesocket(None, None, "head")
+        while "\r\n\r\n" not in self.head_content:
+            data = self.sock.recv(1)
+            self.head_content += data
+        self.closesocket()
+
+    def makerequest(self, condition, objname, serv, start, stop):
+        if condition == "head":
+            return ("HEAD {o} HTTP/1.1\r\n"+"Host: {s}\r\n"+"\r\n\r\n").format(o = objname,s = serv)
+        elif stop != None:
+            print "here 1"
+            return ("GET {o} HTTP/1.1\r\n"+"Host: {s}\r\n"+"Range: bytes={h}-{z}\r\n\r\n").format(o = objname,s = serv,h = start,z = stop)            
+        else:
+            print "here 2"
+            return ("GET {o} HTTP/1.1\r\n"+"Host: {s}\r\n"+"Range: bytes={h}-\r\n"+"Connection: close\r\n\r\n").format(o = objname,s = serv,h = start)
+    
+    def makesocket(self, start, stop, condition):
+        self.sock = sk.socket(sk.AF_INET, sk.SOCK_STREAM)
+        try:
+            self.sock.connect((self.servName, self.port))
+            request = self.makerequest(condition, self.objName, self.servName, start, stop)
+            self.sock.send(request)
+        except:
+            print "make socket error"
+            sys.exit(1)
+
+    def closesocket(self):
+        self.sock.close()
+
+    def check_redirect(self):
+        new_path = ""
+        if "HTTP/1.1 301" in self.head_content or "HTTP/1.1 302" in self.head_content:
+            self.need_redirect = True
+            for i in self.head_content[self.head_content.find("location: ") + 10 :]:
+                if i == "\r":
+                    break
+                else:
+                    new_path += i
+            print "==========="
+            print "debug 2"
+            self.objName = "/" + new_path
+            self.head_content = ""
+            print self.servName, self.objName
+            self.getHeader(self.servName, self.objName)
+            print "==========="
+
+    def get_content_length(self):
+        content_length_str = ""
+        if "HTTP/1.1 200 OK" in self.head_content or "HTTP/1.1 206" in self.head_content:
+            self.error = False
+            if "Content-Length: " in self.head_content:
+                for i in self.head_content[self.head_content.find("-Length: ") + 9 :]:
+                    self.has_content_length = True
+                    if i == "\r":
+                        break
+                    else:
+                        content_length_str += i
+        self.header_length = len(self.head_content)
+        if content_length_str != "":
+            self.content_length = int(content_length_str)
+
+    def check_version(self, headfile):
+        read_head = open(headfile, "r")
+        file_head_cotent = read_head.read()
+        old_etag = ""
+        old_datemodified = ""
+
+        if "ETag: " in file_head_cotent:
+            for i in file_head_cotent[file_head_cotent.find("ETag: ") + 6:]:
+                old_etag += i
+                if i == "\r":
+                    break
+            if old_etag in self.head_content:
+                self.same_version = True
+        elif "Last-Modified: " in file_head_cotent:
+            for i in file_head_cotent[file_head_cotent.find("Last-Modified: ") + 15:]:
+                old_datemodified += i
+                if i == "\r":
+                    break
+            if old_datemodified in self.head_content:
+                self.same_version = True
+
+    def check_download_type(self):
+        print "debug 0"
+        self.get_content_length()
+        print "=============="
+        print self.header_length
+        print self.has_content_length
+        print self.content_length
+        print self.error
+        print "=============="
+        if self.error:
+            print "unable to download file"
+            sys.exit(1)
+
+        # check if file exist or not
+
+        if os.path.exists(self.filename):
+            file_size = os.stat(self.filename).st_size
+            self.total_loaded_content = file_size
+
+            # headfile exists == file not finish loading
+
+            if os.path.exists("HEADFILE" + self.filename):
+                print "1"
+                self.check_version("HEADFILE" + self.filename)
+                print "check_version =", self.same_version
+
+            # check if file same version or not
+
+                # same version, not finish downloading and has content length
+
+                if self.same_version == True and file_size != self.content_length and self.content_length != 0:
+                    self.makesocket(file_size, None, None)
+
+                # same version and don't have content length
+
+                elif self.same_version == True and self.content_length == 0:
+                    self.makesocket(file_size, None, None)
+
+                # cannot check version --> redownload
+
+                else:
+                    print "2"
+                    os.remove(self.filename)
+                    os.remove("HEADFILE" + self.filename)
+                    if self.content_length == 0:
+                        self.makesocket(0, None, None)
+                    else:
+                        self.makesocket(0, self.content_length, None)
+                    self.total_loaded_content = 0
+
+            # file not exist
+
+            else:
+                if file_size == self.content_length:
+                    print "file has been downloaded"
+                    sys.exit(1)
+                os.remove(self.filename)
+                self.makesocket(0, self.content_length, None)
+                self.total_loaded_content = 0
+
+        else:
+            if self.content_length == 0:
+                self.makesocket(0, None, None)
+            else:
+                self.makesocket(0, self.content_length, None)
+
+    def write_file(self):
+        self.file_content = ""
+        data = self.sock.recv(1024)
+        self.total_loaded_content += len(data)
+        print self.total_loaded_content, self.content_length
+        self.file_content += data
+        self.open_file = open(self.filename, "a+")
+        self.open_file.write(self.file_content)
+
+    def download_and_resume(self):
+
+        loaded_head_content = ""
+        head_file = file
+
+        # write header in file
+
+        while "\r\n\r\n" not in loaded_head_content:
+            data = self.sock.recv(1)
+            loaded_head_content += data
+            open_head = open("HEADFILE" + self.filename, "wb")
+            open_head.write(loaded_head_content)
+
+        # write content without header
+
+        if self.has_content_length == True:
+            while self.total_loaded_content < self.content_length:
+                self.write_file()
+            self.open_file.close()
+            open_head.close()
+            self.closesocket()
+
+        else:
+
+            # no content length
+            print "no content length"
+            while True:
+                self.file_content = ""
+                data = self.sock.recv(1024)
+                self.total_loaded_content += len(data)
+                self.file_content += data
+                self.open_file = open(self.filename, "a+")
+                self.open_file.write(self.file_content)
+                print self.total_loaded_content
+                if len(data) == 0:
+                    self.open_file.close()
+                    open_head.close()
+                    self.closesocket()
+                    break
+        os.remove("HEADFILE" + self.filename)
+    
+    def parse_content(self):
+        count = 0
+        self.get_content_length()
+        content_left = self.content_length
+        while content_left > 0:
+            if content_left - 50000 <= 0:
+                self.length.append(self.length[count] + content_left)
+                content_left = 0
+            else:
+                self.length.append(self.length[count] + 50000)
+                content_left -= 50000
+            count += 1
+
+        print "each length =", self.length
+
+    def make_gap(self):
+        each_gap = (self.length[self.download_chunk + 1] - self.length[self.download_chunk]) / self.n_connection
+        for i in range(self.n_connection):
+            if self.bytes_size_number == []:
+                self.bytes_size_number.append(each_gap)
+            else:
+                self.bytes_size_number.append(self.bytes_size_number[-1] + each_gap)
+        self.bytes_size_number[-1] = self.bytes_size_number[-1] + (self.length[self.download_chunk + 1] - self.bytes_size_number[-1])
+        self.download_chunk += 1
+
+    def make_multiple_request(self):
+        for i in range(len(self.bytes_size_number) - 1):
+            start, stop = self.bytes_size_number[i], self.bytes_size_number[i + 1]
+            self.bytes_range.append(("bytes={h}-{z}").format(h = start, z = stop))
+            print "===== multiple start, stop =====", i
+            print start, stop
+
+        print self.bytes_range
+
+    # def multi_downloading(self, start, stop, servName, objName):
+    #     print "in"
+    #     self.total_loaded_content = 0
+    #     header_content = ""
+    #     self.download_file = file
+    #     self.makesocket(start, stop, None)
+    #     while "\r\n\r\n" not in header_content:
+    #         data = self.sock.recv(1)
+    #         header_content += data
+    #     print header_content
+    #     while self.total_loaded_content < (stop - start):
+    #         self.write_file()
+    #     self.open_file.close()
+    #     self.closesocket()
+
+    #     print "out"
+    #     print "====================================="
+ 
+clients = [
+    # download_or_resume("classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg", "test.jpg", 5),
+    # download_or_resume("www.muic.info/", "test.php", 3),
+#     HTTPClient("classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg", "lionnoi.jpg"),
+    # download_or_resume("images.clipartpanda.com/lion-clipart-4Tb5XEETg.png", "test.jpg", 4)
+    # http://cs.muic.mahidol.ac.th/~ktangwon/hugefile.qqq
+]
+ 
+logging.basicConfig(level=logging.DEBUG,
+    format="%(asctime)-15s %(name)s: %(message)s"
+    )
+ 
+# asyncore.loop()
+
+def check_url(url):
+    if url[:7] != "http://":
+        url = "http://" + url
+    parse = urlparse(url)
+    return parse.netloc, parse.path
+
+def main(argv):
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "o:c:", ["output=","cname="])
+    except getopt.GetoptError as err:
+        print str(err)
+        usage()
+        sys.exit(1)
+    url = argv[-1]
+    for opt,arg in opts:
+        if opt == "-o":
+            filename=arg
+        elif opt == "-c":
+            print "do sth"
+    servName, path = check_url(url)
+    download_or_resume(servName, path, filename, 3)
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
