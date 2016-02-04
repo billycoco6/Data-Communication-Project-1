@@ -40,7 +40,6 @@ class download_or_resume(object):
         self.total_loaded_content = 0
         
         if self.n_connection == 1:
-            print "here start"
             self.check_download_type()
             self.download_and_resume()
 
@@ -54,13 +53,8 @@ class download_or_resume(object):
                 self.async_download(self.bytes_size_number[i*self.n_connection:(i*self.n_connection)+self.n_connection+1], i)
             
         # print "bytes_size_number =",self.bytes_size_number
-        print "=========="
-
-        print "cp 6: multiple clients"
 
         # self.async_download()
-
-        print "end"
 
     def getHeader(self, servName, objName):
         self.makesocket(None, None, "head")
@@ -91,13 +85,9 @@ class download_or_resume(object):
                     break
                 else:
                     new_path += i
-            print "==========="
-            print "debug 2"
             self.objName = "/" + new_path
             self.head_content = ""
-            print self.servName, self.objName
             self.getHeader(self.servName, self.objName)
-            print "==========="
 
     def get_content_length(self):
         content_length_str = ""
@@ -136,16 +126,8 @@ class download_or_resume(object):
                 self.same_version = True
 
     def check_download_type(self):
-        print "debug 0"
         self.get_content_length()
-        print "=============="
-        print self.header_length
-        print self.has_content_length
-        print self.content_length
-        print self.error
-        print "=============="
         if self.error:
-            print "unable to download file"
             sys.exit(1)
 
         # check if file exist or not
@@ -157,9 +139,7 @@ class download_or_resume(object):
             # headfile exists == file not finish loading
 
             if os.path.exists("HEADFILE" + self.filename):
-                print "1"
                 self.check_version("HEADFILE" + self.filename)
-                print "check_version =", self.same_version
 
             # check if file same version or not
 
@@ -176,7 +156,6 @@ class download_or_resume(object):
                 # cannot check version --> redownload
 
                 else:
-                    print "2"
                     os.remove(self.filename)
                     os.remove("HEADFILE" + self.filename)
                     if self.content_length == 0:
@@ -189,7 +168,6 @@ class download_or_resume(object):
 
             else:
                 if file_size == self.content_length:
-                    print "file has been downloaded"
                     sys.exit(1)
                 os.remove(self.filename)
                 self.makesocket(0, self.content_length, None)
@@ -205,7 +183,6 @@ class download_or_resume(object):
         self.file_content = ""
         data = self.sock.recv(1024)
         self.total_loaded_content += len(data)
-        print self.total_loaded_content, self.content_length
         self.file_content += data
         self.open_file = open(self.filename, "a+")
         self.open_file.write(self.file_content)
@@ -235,7 +212,7 @@ class download_or_resume(object):
         else:
 
             # no content length
-            print "no content length"
+
             while True:
                 self.file_content = ""
                 data = self.sock.recv(1024)
@@ -243,7 +220,6 @@ class download_or_resume(object):
                 self.file_content += data
                 self.open_file = open(self.filename, "a+")
                 self.open_file.write(self.file_content)
-                print self.total_loaded_content
                 if len(data) == 0:
                     self.open_file.close()
                     open_head.close()
@@ -263,8 +239,6 @@ class download_or_resume(object):
                 self.length.append(self.length[count] + 50000)
                 content_left -= 50000
             count += 1
-
-        print "each length =", self.length
 
     def make_gap(self):
         each_gap = (self.length[self.download_chunk + 1] - self.length[self.download_chunk]) / self.n_connection
@@ -331,7 +305,6 @@ class HTTPClient(asyncore.dispatcher):
         self.total_loaded_content = 0
 
         self.request = makerequest(None, self.objName, self.servName, self.start, self.stop, self.filename)
-        print "request = ",self.request
         self.write(self.request)
 
     def write(self,msg):
@@ -344,18 +317,14 @@ class HTTPClient(asyncore.dispatcher):
         self.open_file = open(self.filename, "a+")
         self.open_file.write(content)
 
-        # with open(self.savefileName, "a+") as f:
-        #         f.write(content)
-        #         f.flush()
-
     def handle_close(self):
         self.logger.debug("got disconnected")
         self.close()
 
-    def handle_read(self): ## when recv = there is something for you to read --> do what
+    def handle_read(self): 
 
         if "\r\n\r\n" not in self.recvbuf.getvalue():
-            buf = self.recv(1) ## 2K - 10K -- recommend 8K
+            buf = self.recv(1)
             self.recvbuf.write(buf)
             loaded_head_content += buf
 
@@ -366,13 +335,13 @@ class HTTPClient(asyncore.dispatcher):
             self.writefile(buf)
                 
 
-    def writeable(self): # if there is anything to send??
-        return len(self.sendbuf) > 0 ## you have sth to send
+    def writeable(self): 
+        return len(self.sendbuf) > 0 
 
 
     def handle_write(self):
         bytes_send = self.send(self.sendbuf)
-        self.sendbuf = self.sendbuf[bytes_send:] ## the remainder
+        self.sendbuf = self.sendbuf[bytes_send:] 
 
 
 
