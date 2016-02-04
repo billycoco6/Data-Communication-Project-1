@@ -183,6 +183,7 @@ class download_or_resume(object):
         self.file_content += data
         self.open_file = open(self.filename, "a+")
         self.open_file.write(self.file_content)
+        self.open_file.close()
 
     def download_and_resume(self):
 
@@ -249,39 +250,34 @@ class download_or_resume(object):
 
     def async_download(self, start_stop, time):
 
+        # open(self.filename, "a").close()
+        # download = open(self.filename, "r+b")
         clients = []
-
-        # print "length", start_stop
-
         for i in range(self.n_connection):
             print "bytes={h}-{z}".format(h=start_stop[i], z=start_stop[i+1])
-            clients.append(HTTPClient(self.servName, self.objName, self.port, start_stop[i], start_stop[i+1], self.filename+str(time)+str(i)))
+            if i != 0:
+                clients.append(HTTPClient(self.servName, self.objName, self.port, start_stop[i]+1, start_stop[i+1], self.filename+str(time)+str(i)+".txt"))
+            else:
+                clients.append(HTTPClient(self.servName, self.objName, self.port, start_stop[i], start_stop[i+1], self.filename+str(time)+str(i)+".txt"))
+            
 
-        # print clients
+        logging.basicConfig(level=logging.DEBUG,
+        format="%(asctime)-15s %(name)s: %(message)s"
 
-        # logging.basicConfig(level=logging.DEBUG,
-        # format="%(asctime)-15s %(name)s: %(message)s"
+        )
+        asyncore.loop()
+        self.openandwrite(clients)
 
-        # )
-        # asyncore.loop()
+    def openandwrite(self,clients):
+        data = ""
+        for i in len(clients):
+            f = open(clients[i].filename,'rb')
+            data += f.read()
+            f.close()
+        self.open_file = open(self.filename, "a+")
+        self.open_file.write(data)
+        self.open_file.close()
 
-    # def multi_downloading(self, start, stop, servName, objName):
-    #     print "in"
-    #     self.total_loaded_content = 0
-    #     header_content = ""
-    #     self.download_file = file
-    #     self.makesocket(start, stop, None)
-    #     while "\r\n\r\n" not in header_content:
-    #         data = self.sock.recv(1)
-    #         header_content += data
-    #     print header_content
-    #     while self.total_loaded_content < (stop - start):
-    #         self.write_file()
-    #     self.open_file.close()
-    #     self.closesocket()
-
-    #     print "out"
-    #     print "====================================="
 
 class HTTPClient(asyncore.dispatcher):
     def __init__(self, servName, path, port, start, stop, filename):
@@ -312,6 +308,7 @@ class HTTPClient(asyncore.dispatcher):
     def writefile(self, content):
         self.open_file = open(self.filename, "a+")
         self.open_file.write(content)
+        self.open_file.close()
 
     def handle_close(self):
         self.logger.debug("got disconnected")
@@ -322,7 +319,6 @@ class HTTPClient(asyncore.dispatcher):
         if "\r\n\r\n" not in self.recvbuf.getvalue():
             buf = self.recv(1)
             self.recvbuf.write(buf)
-            loaded_head_content += buf
 
         else:
             buf = self.recv(8192)
@@ -330,7 +326,6 @@ class HTTPClient(asyncore.dispatcher):
             self.total_loaded_content += len(buf)
             self.writefile(buf)
                 
-
     def writeable(self): 
         return len(self.sendbuf) > 0 
 
@@ -338,14 +333,6 @@ class HTTPClient(asyncore.dispatcher):
     def handle_write(self):
         bytes_send = self.send(self.sendbuf)
         self.sendbuf = self.sendbuf[bytes_send:] 
-
-
-
-
- 
-    # download_or_resume("classroomclipart.com/images/gallery/Clipart/Animals/Lion_Clipart/TN_lion-clipart-115.jpg", "test.jpg", 5),
-    # download_or_resume("www.muic.info/", "test.php", 3),
-    # download_or_resume("images.clipartpanda.com/lion-clipart-4Tb5XEETg.png", "test.jpg", 4)
 
 
 
