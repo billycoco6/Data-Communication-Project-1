@@ -51,10 +51,6 @@ class download_or_resume(object):
             for i in range(len(self.length) - 1):
                 self.make_gap()
                 self.async_download(self.bytes_size_number[i*self.n_connection:(i*self.n_connection)+self.n_connection+1], i)
-            
-        # print "bytes_size_number =",self.bytes_size_number
-
-        # self.async_download()
 
     def getHeader(self, servName, objName):
         self.makesocket(None, None, "head")
@@ -168,6 +164,7 @@ class download_or_resume(object):
 
             else:
                 if file_size == self.content_length:
+                    print "file downloaded successfully"
                     sys.exit(1)
                 os.remove(self.filename)
                 self.makesocket(0, self.content_length, None)
@@ -258,9 +255,9 @@ class download_or_resume(object):
 
         for i in range(self.n_connection):
             print "bytes={h}-{z}".format(h=start_stop[i], z=start_stop[i+1])
-            # clients.append(HTTPClient(self.servName, self.objName, self.port, start_stop[i], start_stop[i+1], self.filename+str(time)+str(i)))
+            clients.append(HTTPClient(self.servName, self.objName, self.port, start_stop[i], start_stop[i+1], self.filename+str(time)+str(i)))
 
-        print clients
+        # print clients
 
         # logging.basicConfig(level=logging.DEBUG,
         # format="%(asctime)-15s %(name)s: %(message)s"
@@ -290,21 +287,20 @@ class HTTPClient(asyncore.dispatcher):
     def __init__(self, servName, path, port, start, stop, filename):
         asyncore.dispatcher.__init__(self) 
         self.port = 80
+        self.filename = filename
+        self.servName = servName
+        self.objName = path
         self.recvbuf = StringIO()
         self.sendbuf = ""
         self.logger = logging.getLogger(self.servName+self.objName)
         self.create_socket(sk.AF_INET, sk.SOCK_STREAM)
         self.connect((self.servName, self.port))
 
-        self.filename = filename
-        self.url = url
-        self.servName = servName
-        self.objName = path
         self.start = start
         self.stop = stop
         self.total_loaded_content = 0
 
-        self.request = makerequest(None, self.objName, self.servName, self.start, self.stop, self.filename)
+        self.request = makerequest(None, self.objName, self.servName, self.start, self.stop)
         self.write(self.request)
 
     def write(self,msg):
@@ -342,35 +338,6 @@ class HTTPClient(asyncore.dispatcher):
     def handle_write(self):
         bytes_send = self.send(self.sendbuf)
         self.sendbuf = self.sendbuf[bytes_send:] 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
